@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -15,12 +16,19 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <input.html>\n", os.Args[0])
+	baseURL := flag.String("base", "", "Base URL for resolving relative links (e.g. https://example.com)")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] <input.html>\n\nOptions:\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+
+	if flag.NArg() < 1 {
+		flag.Usage()
 		os.Exit(1)
 	}
 
-	inputPath := os.Args[1]
+	inputPath := flag.Arg(0)
 
 	f, err := os.Open(inputPath)
 	if err != nil {
@@ -34,6 +42,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error parsing HTML: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Determine base URL: flag > <base> tag > <link rel=canonical>
+	resolvedBase := resolveBaseURL(doc, *baseURL)
 
 	// Determine source file path relative to working directory
 	sourceFile := inputPath
@@ -62,9 +73,33 @@ func main() {
 	writeFrontmatter(outFile, fm)
 
 	// Write markdown content
-	converter.ToMarkdown(outFile, contentRoot)
+	converter.ToMarkdown(outFile, contentRoot, resolvedBase)
 
 	fmt.Printf("Converted: %s -> %s\n", inputPath, outPath)
+}
+
+// resolveBaseURL determines the base URL for resolving relative links.
+// Priority: explicit flag > <base href> > <link rel="canonical"> > empty (leave relative).
+func resolveBaseURL(doc *goquery.Document, flagBase string) string {
+	if flagBase != "" {
+		return strings.TrimRight(flagBase, "/")
+	}
+	if base, exists := doc.Find("base[href]").Attr("href"); exists && base != "" {
+		return strings.TrimRight(base, "/")
+	}
+	if canonical, exists := doc.Find("link[rel=canonical]").Attr("href"); exists && canonical != "" {
+		// Strip path to get origin only
+		if idx := strings.Index(canonical, "://"); idx != -1 {
+			end := idx + 3
+			for i := end; i < len(canonical); i++ {
+				if canonical[i] == '/' {
+					return canonical[:i]
+				}
+			}
+			return canonical
+		}
+	}
+	return ""
 }
 
 func computeOutputPath(inputPath string) string {
@@ -94,7 +129,6 @@ func writeYAMLField(w io.Writer, key, value string) {
 	if value == "" {
 		return
 	}
-	// Escape quotes in YAML strings
 	escaped := strings.ReplaceAll(value, "\"", "\\\"")
 	fmt.Fprintf(w, "%s: \"%s\"\n", key, escaped)
 }
