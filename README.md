@@ -11,6 +11,10 @@ go build -o html2md .
 # Convert a file (writes .md alongside the .html)
 ./html2md page.html
 # -> page.md
+
+# With a base URL to resolve relative links
+./html2md -base https://example.com page.html
+# -> page.md (relative "/about" becomes "https://example.com/about")
 ```
 
 **Requires:** Go 1.21+
@@ -31,27 +35,39 @@ go build -o html2md .
 
 Headings (h1–h6), paragraphs, bold, italic, inline code, links (relative → absolute), images with alt text, ordered lists (respects `start` attribute), unordered lists, tables, blockquotes, code blocks with language detection, `<details>`/`<summary>` (FAQs).
 
+## Options
+
+```
+-base string   Base URL for resolving relative links (e.g. https://example.com)
+```
+
+If `-base` is not provided, the tool tries to auto-detect from:
+1. `<base href="...">` tag
+2. `<link rel="canonical" href="...">` tag (origin only)
+
+If neither is found, relative URLs are left as-is.
+
 ## Output Format
 
 ```markdown
 ---
-title: "Are VPNs Legal? | ExpressVPN"
-description: "Uncover the legal status of VPNs worldwide..."
-og_image: "https://..."
-canonical: "https://www.expressvpn.com/blog/are-vpns-legal/"
-author: "Naiyie Lamb"
-date: "29.09.2023"
-reading_time: "17 mins"
-source_file: "blog/are-vpns-legal/index.html"
+title: "Understanding Web Security | Example Blog"
+description: "A deep dive into modern web security practices..."
+og_image: "https://example.com/images/security.jpg"
+canonical: "https://example.com/blog/web-security"
+author: "Jane Smith"
+date: "2024-03-15"
+reading_time: "8 mins"
+source_file: "blog/web-security.html"
 ---
 
-# Are VPNs legal? A global guide to VPN legality
+# Understanding Web Security
 
-VPNs are digital freedom tools that protect your online privacy...
+A deep dive into modern web security practices...
 
-## Countries where VPNs are legal
+## Why It Matters
 
-VPNs are legal in [the U.S.](https://...), [Canada](https://...)...
+Every [website](https://example.com) needs proper security...
 ```
 
 ## Project Structure
@@ -80,5 +96,4 @@ Three-step pipeline:
 ## Limitations
 
 - **Single file mode** — processes one HTML file per invocation.
-- **Hardcoded base URL** — relative URLs starting with `/` are resolved to `https://www.expressvpn.com`. Change this in `converter/markdown.go:169` and `converter/markdown.go:407`.
 - **Full DOM parse** — loads the entire HTML into memory. Works for files up to ~1MB; larger files may need more memory.
